@@ -1,0 +1,46 @@
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+**/.DS_Store
+
+# ── Claude Code local config ──────────────────────────────────────────────────
+# Machine-specific permission allowlists; not useful to other contributors
+.claude/
+
+# ── Credentials & secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*
+!.env.example
+
+# ── Operational data folders ──────────────────────────────────────────────────
+# These hold CSV/XLSX exports dropped in locally — not source code
+01-inputs/
+02-processing/
+03-outputs/
+
+# ── Website — separate git repo ───────────────────────────────────────────────
+# Has its own .git; keep it independent
+website/
+
+# ── Node / build artifacts ────────────────────────────────────────────────────
+**/node_modules/
+**/dist/
+**/.vite/
+**/*.tsbuildinfo
+
+# ── Python ────────────────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.pyc
+**/.venv/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+**/*.log
+**/logs/
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

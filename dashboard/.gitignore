@@ -1,0 +1,26 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+.vite/
+*.tsbuildinfo
+
+# ── Environment / credentials ─────────────────────────────────────────────────
+.env
+.env.local
+.env.*
+!.env.example
+
+# ── Runtime data (OAuth tokens, generated mappings) ───────────────────────────
+# Keep the folder (and the template xlsx) but ignore all runtime JSON
+data/tokens.json
+data/bp-mappings.json
+data/bp-store-headers.json
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
