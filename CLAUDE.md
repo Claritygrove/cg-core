@@ -37,7 +37,7 @@ operating 6 Plato's Closet locations and 1 Style Encore in Michigan.
 
 ---
 
-## The Nest Dashboard (`dashboard/`)
+## The Core Dashboard (`dashboard/`)
 
 ### Stack
 - React 18 + Vite 5 frontend (port 3000)

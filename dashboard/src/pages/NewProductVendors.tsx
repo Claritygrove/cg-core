@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ExternalLink, ChevronDown, ChevronUp, Package, Pencil, Check, Plus, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Vendor {
   id: string;
@@ -174,6 +175,8 @@ function VendorEditCard({
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function NewProductVendors() {
+  const { user } = useAuth();
+  const canEdit = user?.tier === "admin" || user?.tier === "dm";
   const [vendors, setVendors] = useState<Vendor[]>(() =>
     JSON.parse(JSON.stringify(DEFAULT_VENDORS))
   );
@@ -215,7 +218,7 @@ export default function NewProductVendors() {
             Vendors approved for new product purchases across Eagle V stores.
           </p>
         </div>
-        {!editMode ? (
+        {!editMode && canEdit ? (
           <button
             onClick={() => setEditMode(true)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border/60 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
@@ -223,7 +226,7 @@ export default function NewProductVendors() {
             <Pencil className="h-3.5 w-3.5" />
             Edit
           </button>
-        ) : (
+        ) : editMode ? (
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleCancel}
@@ -240,7 +243,7 @@ export default function NewProductVendors() {
               Done
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Vendor list */}

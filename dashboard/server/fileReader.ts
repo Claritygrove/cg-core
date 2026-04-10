@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const XLSX = require("xlsx") as typeof import("xlsx");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUTS_DIR = path.resolve(__dirname, "../../01-inputs");
+const INPUTS_DIR = path.resolve(__dirname, "../01-inputs");
 
 // Maps store names from WIW to our store IDs
 const STORE_NAME_MAP: Record<string, string> = {

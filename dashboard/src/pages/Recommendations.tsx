@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,10 @@ import {
   ChevronUp,
   Server,
   Layers,
+  NotebookPen,
+  Plus,
+  Trash2,
+  Save,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -166,6 +170,101 @@ const NETWORK_INFO: Record<string, StoreNetwork> = {
 const WINMARK_SUPPORT = { phone: "800-752-9212", email: "supportcenter@winmarkcorporation.com" };
 const CHASE_SUPPORT   = { phone: "888-886-8869", companyNumber: "1529636" };
 const CC_TERMINAL     = "Ingenico Lane/5000";
+
+// ─── Store Notes ──────────────────────────────────────────────────────────────
+
+function StoreNotesBlock({ storeId }: { storeId: string }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data } = useQuery<{ notes: string[] }>({
+    queryKey: ["store-notes", storeId],
+    queryFn: () => fetch(`/api/stores/${storeId}/notes`).then((r) => r.json()),
+  });
+
+  const notes = data?.notes ?? [];
+
+  const save = useMutation({
+    mutationFn: (updated: string[]) =>
+      fetch(`/api/stores/${storeId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: updated }),
+      }).then((r) => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["store-notes", storeId] }),
+  });
+
+  function addNote() {
+    const text = draft.trim();
+    if (!text) return;
+    save.mutate([...notes, text]);
+    setDraft("");
+    textRef.current?.focus();
+  }
+
+  function deleteNote(i: number) {
+    save.mutate(notes.filter((_, idx) => idx !== i));
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote();
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-0 border-b border-border/60">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2 pb-4">
+          <div className="p-1.5 bg-muted rounded-md shrink-0">
+            <NotebookPen className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          Manager Notes
+          <span className="ml-auto text-[10px] font-normal text-muted-foreground">⌘↵ to save</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-4 space-y-3">
+        {/* Existing notes */}
+        {notes.length > 0 && (
+          <div className="space-y-2">
+            {notes.map((note, i) => (
+              <div key={i} className="group flex items-start gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/30">
+                <p className="flex-1 text-[12px] text-foreground/85 leading-relaxed whitespace-pre-wrap">{note}</p>
+                <button
+                  onClick={() => deleteNote(i)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0 mt-0.5"
+                  title="Delete note"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* New note input */}
+        <div className="flex gap-2">
+          <textarea
+            ref={textRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder="Add a note — inventory levels, staffing changes, floorset observations..."
+            rows={3}
+            className="flex-1 resize-none text-[12px] rounded-lg bg-muted/30 border border-border/40 px-3 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 leading-relaxed"
+          />
+          <button
+            onClick={addNote}
+            disabled={!draft.trim() || save.isPending}
+            className="self-end flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[12px] font-medium shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Overhead floorset SVG ────────────────────────────────────────────────────
 
@@ -693,6 +792,9 @@ export default function StoreInfo() {
 
             {/* Network Information */}
             <NetworkInfoBlock storeId={selectedStore.id} storeName={selectedStore.name} />
+
+            {/* Manager Notes */}
+            <StoreNotesBlock storeId={selectedStore.id} />
 
             {/* Current Floorset */}
             <Card>

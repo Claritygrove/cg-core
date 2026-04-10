@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
-import { ChevronUp, ChevronDown, X, ArrowLeft, Download, FileText, Plus, Check } from "lucide-react";
+import { ChevronUp, ChevronDown, X, ArrowLeft, Download, FileText, Plus, Check, UserPlus, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import type { UserTier } from "@/contexts/AuthContext";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AddUserModal, CAN_CREATE, STORES as APP_STORES, TIER_LABELS } from "@/components/AddUserModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -202,18 +206,63 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 function AddEmployeeModal({
   onAdd,
   onClose,
+  myTier,
 }: {
   onAdd: (emp: Employee) => void;
   onClose: () => void;
+  myTier: UserTier;
 }) {
+  const qc = useQueryClient();
   const [fullName, setFullName] = useState("");
   const [employeeType, setEmployeeType] = useState<EmployeeType>("Sales Associate");
   const [store, setStore] = useState(STORES[0]);
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [tier, setTier] = useState<UserTier>(CAN_CREATE[myTier][0] ?? "standard");
+  const [error, setError] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  const allowedTiers = CAN_CREATE[myTier];
+
+  const createUser = useMutation({
+    mutationFn: (body: object) =>
+      fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.json()).error ?? "Failed to create user");
+        return r.json();
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["app-users"] }),
+  });
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!fullName.trim()) return;
+    setError("");
+
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+
+    const [firstName, ...rest] = fullName.trim().split(" ");
+    const lastName = rest.join(" ") || firstName!;
+
+    try {
+      await createUser.mutateAsync({
+        email,
+        password,
+        firstName,
+        lastName,
+        tier,
+        role: employeeType,
+        storeId: tier === "standard" ? APP_STORES.find((s) => s.name === store)?.id : undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user");
+      return;
+    }
+
     onAdd({
       id: Date.now().toString(),
       fullName: fullName.trim(),
@@ -229,48 +278,92 @@ function AddEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="bg-card border border-border/60 rounded-xl shadow-2xl w-full max-w-md">
+      <div className="bg-card border border-border/60 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
-          <h2 className="text-sm font-semibold">Add Employee to Training</h2>
+          <h2 className="text-sm font-semibold">Add Employee</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className={labelCls}>Full Name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="First Last"
-              className={inputCls}
-              autoFocus
-            />
+          {/* Login credentials */}
+          <div className="space-y-3 pb-3 border-b border-border/40">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-primary/70">Login Account</p>
+            <div>
+              <label className={labelCls}>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="employee@email.com"
+                className={inputCls}
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Temporary Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                className={inputCls}
+                required
+                minLength={6}
+              />
+            </div>
+            {allowedTiers.length > 0 && (
+              <div>
+                <label className={labelCls}>Access Level</label>
+                <select value={tier} onChange={(e) => setTier(e.target.value as UserTier)} className={inputCls}>
+                  {allowedTiers.map((t) => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+                </select>
+              </div>
+            )}
           </div>
-          <div>
-            <label className={labelCls}>Employee Type</label>
-            <select value={employeeType} onChange={(e) => setEmployeeType(e.target.value as EmployeeType)} className={inputCls}>
-              {EMPLOYEE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+
+          {/* Training info */}
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">Training Details</p>
+            <div>
+              <label className={labelCls}>Full Name</label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="First Last"
+                className={inputCls}
+                required
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Training Role</label>
+              <select value={employeeType} onChange={(e) => setEmployeeType(e.target.value as EmployeeType)} className={inputCls}>
+                {EMPLOYEE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Store</label>
+              <select value={store} onChange={(e) => setStore(e.target.value)} className={inputCls}>
+                {STORES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Start Date</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+            </div>
           </div>
-          <div>
-            <label className={labelCls}>Store</label>
-            <select value={store} onChange={(e) => setStore(e.target.value)} className={inputCls}>
-              {STORES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Start Date</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
-          </div>
+
+          {error && <p className="text-[12px] text-rose-400 bg-rose-400/10 border border-rose-400/20 rounded-lg px-3 py-2">{error}</p>}
+
           <div className="flex items-center gap-3 pt-1">
             <button
               type="submit"
-              disabled={!fullName.trim()}
+              disabled={!fullName.trim() || !email.trim() || createUser.isPending}
               className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              Add Employee
+              {createUser.isPending ? "Adding…" : "Add Employee"}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-border/60 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
               Cancel
@@ -288,15 +381,27 @@ function EmployeeDetail({
   employee,
   onBack,
   onToggle,
+  onChangeRole,
 }: {
   employee: Employee;
   onBack: () => void;
   onToggle: (item: string) => void;
+  onChangeRole: (newType: EmployeeType) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [pendingRole, setPendingRole] = useState<EmployeeType>(employee.employeeType);
+
   const items = ROLE_CHECKLISTS[employee.employeeType];
   const pdfs = ROLE_PDFS[employee.employeeType];
   const progress = getProgress(employee);
   const completedCount = items.filter((item) => employee.checklist[item]).length;
+
+  function handleSaveRole() {
+    if (pendingRole !== employee.employeeType) {
+      onChangeRole(pendingRole);
+    }
+    setEditing(false);
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -312,10 +417,46 @@ function EmployeeDetail({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold tracking-tight">{employee.fullName}</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${EMPLOYEE_TYPE_COLORS[employee.employeeType]}`}>
-                {employee.employeeType}
-              </span>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {editing ? (
+                <>
+                  <select
+                    value={pendingRole}
+                    onChange={(e) => setPendingRole(e.target.value as EmployeeType)}
+                    className="text-[12px] rounded-lg bg-muted/50 border border-border/70 px-2.5 py-1 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30"
+                  >
+                    {EMPLOYEE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <button
+                    onClick={handleSaveRole}
+                    className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-primary text-white hover:bg-primary/90 transition-colors"
+                  >
+                    <Check className="h-3 w-3" />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setPendingRole(employee.employeeType); setEditing(false); }}
+                    className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${EMPLOYEE_TYPE_COLORS[employee.employeeType]}`}>
+                    {employee.employeeType}
+                  </span>
+                  <button
+                    onClick={() => { setPendingRole(employee.employeeType); setEditing(true); }}
+                    className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-muted/50 transition-colors"
+                    title="Edit role"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit Role
+                  </button>
+                </>
+              )}
               <span className="text-[12px] text-muted-foreground">{employee.store}</span>
               <span className="text-[12px] text-muted-foreground">·</span>
               <span className="text-[12px] text-muted-foreground">Started {formatDate(employee.startDate)}</span>
@@ -398,12 +539,84 @@ function EmployeeDetail({
   );
 }
 
+// ─── App Access Panel ─────────────────────────────────────────────────────────
+
+interface AppUser {
+  id: string; email: string; firstName: string; lastName: string;
+  tier: UserTier; role: string; storeId?: string;
+}
+
+function AppAccessPanel() {
+  const { data, isLoading } = useQuery<{ users: AppUser[] }>({
+    queryKey: ["app-users"],
+    queryFn: () => fetch("/api/users", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const storeName = (id?: string) => APP_STORES.find((s) => s.id === id)?.name ?? "—";
+  const users = data?.users ?? [];
+
+  const TIER_COLORS: Record<UserTier, string> = {
+    admin:         "text-amber-400 bg-amber-400/10 border-amber-400/20",
+    dm:            "text-primary bg-primary/10 border-primary/20",
+    store_manager: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+    standard:      "text-muted-foreground bg-muted/40 border-border/40",
+  };
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  return (
+    <div className="bg-card border border-border/50 rounded-xl overflow-hidden">
+      <div className="px-5 py-3 border-b border-border/40 bg-muted/10">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Current App Users ({users.length})
+        </p>
+      </div>
+      {users.length === 0 ? (
+        <p className="px-5 py-8 text-sm text-muted-foreground text-center">No users yet. Add one above.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/30">
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Name</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Role</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Tier</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Store</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/20">
+            {users.map((u) => (
+              <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                <td className="px-4 py-2.5">
+                  <p className="font-medium text-[13px]">{u.firstName} {u.lastName}</p>
+                  <p className="text-[11px] text-muted-foreground">{u.email}</p>
+                </td>
+                <td className="px-4 py-2.5 text-[13px]">{u.role}</td>
+                <td className="px-4 py-2.5">
+                  <span className={`inline-flex items-center text-[10px] font-semibold border rounded-full px-2 py-0.5 ${TIER_COLORS[u.tier]}`}>
+                    {TIER_LABELS[u.tier]}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-[13px] text-muted-foreground">
+                  {u.tier === "standard" ? storeName(u.storeId) : "All stores"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Training Page ───────────────────────────────────────────────────────
 
 export default function Training() {
+  const { user: me } = useAuth();
+  const [tab, setTab] = useState<"training" | "app-access">("training");
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("startDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterType, setFilterType] = useState<string | null>(null);
@@ -435,6 +648,16 @@ export default function Training() {
     setShowAddModal(false);
   }
 
+  function handleChangeRole(employeeId: string, newType: EmployeeType) {
+    setEmployees((prev) =>
+      prev.map((emp) =>
+        emp.id === employeeId
+          ? { ...emp, employeeType: newType, checklist: {} }
+          : emp
+      )
+    );
+  }
+
   const filtered = useMemo(() => {
     let rows = employees.map((e) => ({ ...e, _progress: getProgress(e) }));
     if (filterType)  rows = rows.filter((r) => r.employeeType === filterType);
@@ -458,6 +681,7 @@ export default function Training() {
         employee={selectedEmployee}
         onBack={() => setSelectedId(null)}
         onToggle={(item) => handleToggle(selectedEmployee.id, item)}
+        onChangeRole={(newType) => handleChangeRole(selectedEmployee.id, newType)}
       />
     );
   }
@@ -465,22 +689,56 @@ export default function Training() {
   // ── List view ──
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {showAddModal && <AddEmployeeModal onAdd={handleAdd} onClose={() => setShowAddModal(false)} />}
+      {showAddModal && me && <AddEmployeeModal onAdd={handleAdd} onClose={() => setShowAddModal(false)} myTier={me.tier} />}
+      {showAddUserModal && me && <AddUserModal onClose={() => setShowAddUserModal(false)} myTier={me.tier} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-3xl font-display font-bold tracking-tight">Training</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-white text-[13px] font-semibold hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add Employee
-        </button>
+        <div className="flex items-center gap-2">
+          {tab === "training" && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-white text-[13px] font-semibold hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Employee
+            </button>
+          )}
+          {tab === "app-access" && me && CAN_CREATE[me.tier].length > 0 && (
+            <button
+              onClick={() => setShowAddUserModal(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-white text-[13px] font-semibold hover:bg-primary/90 transition-colors"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Add User
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Table card */}
-      <Card>
+      {/* Tabs */}
+      <div className="flex bg-muted/50 rounded-lg p-0.5 border border-border/40 w-fit">
+        {(["training", "app-access"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+              tab === t
+                ? "bg-primary text-primary-foreground shadow"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t === "training" ? "Training Checklists" : "App Access"}
+          </button>
+        ))}
+      </div>
+
+      {/* App Access tab */}
+      {tab === "app-access" && <AppAccessPanel />}
+
+      {/* Table card — training tab only */}
+      {tab === "training" && <><Card>
         <CardHeader className="px-5 py-4 border-b border-border/60">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -608,7 +866,7 @@ export default function Training() {
 
       <p className="text-[11px] text-muted-foreground">
         Showing {filtered.length} of {employees.length} employees{hasFilters ? " (filtered)" : ""}.
-      </p>
+      </p></>}
     </div>
   );
 }

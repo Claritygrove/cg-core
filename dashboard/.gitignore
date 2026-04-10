@@ -12,9 +12,11 @@ dist/
 .env.*
 !.env.example
 
-# ── Runtime data (OAuth tokens, generated mappings) ───────────────────────────
+# ── Runtime data (OAuth tokens, user accounts, generated mappings) ────────────
 # Keep the folder (and the template xlsx) but ignore all runtime JSON
 data/tokens.json
+data/users.json
+data/reset-tokens.json
 data/bp-mappings.json
 data/bp-store-headers.json
 
