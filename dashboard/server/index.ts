@@ -30,6 +30,6 @@ app.get("/api/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(3001, () => {
-  console.log("Eagle V API server running on http://localhost:3001");
+app.listen(3001, "0.0.0.0", () => {
+  console.log("Eagle V API server running on http://0.0.0.0:3001");
 });
